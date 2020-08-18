@@ -1,26 +1,3 @@
-/*
- * short.c -- Simple Hardware Operations and Raw Tests
- * short.c -- also a brief example of interrupt handling ("short int")
- *
- * Copyright (C) 2001 Alessandro Rubini and Jonathan Corbet
- * Copyright (C) 2001 O'Reilly & Associates
- *
- * The source code in this file can be freely used, adapted,
- * and redistributed in source or binary form, so long as an
- * acknowledgment appears in derived source files.  The citation
- * should list that the code comes from the book "Linux Device
- * Drivers" by Alessandro Rubini and Jonathan Corbet, published
- * by O'Reilly & Associates.   No warranty is attached;
- * we cannot take responsibility for errors or fitness for use.
- *
- * $Id: short.c,v 1.16 2004/10/29 16:45:40 corbet Exp $
- */
-
-/*
- * FIXME: this driver is not safe with concurrent readers or
- * writers.
- */
-
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -44,16 +21,7 @@
 
 #define SHORT_NR_PORTS	16	/* use 16 ports by default */
 
-/*
- * all of the parameters have no "short_" prefix, to save typing when
- * specifying them at load time
- */
 
-
-
-
-/* default is the first printer port on PC's. "short_base" is there too
-   because it's what we want to use in the code */
 static unsigned long base = 0x140;
 unsigned long short_base = 0;
 module_param(base, long, 0);
@@ -72,17 +40,6 @@ MODULE_AUTHOR ("Oleg Moroz");
 MODULE_LICENSE("Dual BSD/GPL");
 
 
-
-/*
- * Atomicly increment an index into short_buffer
- */
-static inline void short_incr_bp(volatile unsigned long *index, int delta)
-{
-
-}
-
-
-
 int short_open (struct inode *inode, struct file *filp)
 {
 	return 0;
@@ -95,19 +52,12 @@ int short_release (struct inode *inode, struct file *filp)
 }
 
 
-/* first, the port-oriented device */
-
-enum short_modes {SHORT_DEFAULT=0, SHORT_STRING, SHORT_MEMORY};
-
 ssize_t do_short_read (struct inode *inode, struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	return 0;
 }
 
 
-/*
- * Version-specific methods for the fops structure.  FIXME don't need anymore.
- */
 ssize_t short_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	//return do_short_read(filp->f_dentry->d_inode, filp, buf, count, f_pos);
@@ -131,15 +81,10 @@ ssize_t short_write(struct file *filp, const char __user *buf, size_t count,
 
 
 
-
 unsigned int short_poll(struct file *filp, poll_table *wait)
 {
 	return POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
 }
-
-
-
-
 
 
 struct file_operations short_fops = {
@@ -209,9 +154,7 @@ static int cfake_construct_device(struct cfake_dev *dev, int minor,
 		return err;
 	}
 
-	device = device_create(class, NULL, /* no parent device */
-		devno, NULL, /* no additional data */
-		"short" "%d", minor);
+	device = device_create(class, NULL, devno, NULL, "short" "%d", minor);
 
 	if (IS_ERR(device)) {
 		err = PTR_ERR(device);
@@ -229,7 +172,7 @@ int short_init(void)
 {
 	int result;
 	int i;
-
+	int devices_to_destroy = 0;
 	short_base = base;
 
 
@@ -270,15 +213,13 @@ int short_init(void)
 		cfake_class = class_create(THIS_MODULE, "short");
 		if (IS_ERR(cfake_class)) {
 			result = PTR_ERR(cfake_class);
-			release_region(short_base,SHORT_NR_PORTS);
-			return result;
+			goto fail;
 		}
 
 		/* Allocate the array of devices */
-			cfake_devices = (struct cfake_dev *)kzalloc(
-				cfake_ndevices * sizeof(struct cfake_dev),
-				GFP_KERNEL);
-			if (cfake_devices == NULL) {
+			cfake_devices = (struct cfake_dev *)kzalloc(cfake_ndevices * sizeof(struct cfake_dev),GFP_KERNEL);
+			if (cfake_devices == NULL) 
+			{
 				result = -ENOMEM;
 				return result;
 			}
@@ -287,12 +228,18 @@ int short_init(void)
 			for (i = 0; i < cfake_ndevices; ++i) {
 				result = cfake_construct_device(&cfake_devices[i], i, cfake_class);
 				if (result) {
-
-					return result;
+					devices_to_destroy = i;
+					goto fail;
 				}
 			}
-
-		return 0;
+			
+			return 0;
+			
+		
+		fail:
+		cfake_cleanup_module(devices_to_destroy);
+		release_region(short_base,SHORT_NR_PORTS);
+		return result;
 	}
 
 	void short_cleanup(void)
@@ -300,6 +247,8 @@ int short_init(void)
 		/* Make sure we don't leave work queue/tasklet functions running */
 		unregister_chrdev(cfake_major, "short");
 		release_region(short_base,SHORT_NR_PORTS);
+		cfake_cleanup_module(1);
+		
 	}
 
 	module_init(short_init);
