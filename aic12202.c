@@ -184,7 +184,7 @@ int aic12202_init(void)
 	  int k =inb(aic12202_base+14);
 	  int n =inb(aic12202_base+15);
 	    if (!((k=='C'||k=='V')&&(n==8||n==16))) {
-	    	printk(KERN_INFO "%s: ne plata\n",AIC12202_DEVICE_NAME,aic12202_base);
+	    	printk(KERN_INFO "%s: Couldn't find device at base %04X\n",AIC12202_DEVICE_NAME,aic12202_base);
 	    	return -ENODEV;
 	    };
 
