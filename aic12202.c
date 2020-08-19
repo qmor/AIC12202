@@ -98,7 +98,7 @@ ssize_t aic12202_write(struct file *filp, const char __user *buf, size_t count,	
         uint8_t _buf[4];
         copy_from_user(_buf, buf, count);
         channel = _buf[0];
-        if (channel > 7)
+        if (channel > (AIC12202_NR_PORTS-1))
             return 0;
         value = _buf[1]<<8|_buf[2];
         //printk(KERN_INFO "%02X %02X %02X %02X\n",_buf[0], _buf[1],_buf[2],_buf[3]);
