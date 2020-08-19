@@ -42,6 +42,26 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 int aic12202_open (struct inode *inode, struct file *filp)
 {
+    unsigned int mj = imajor(inode);
+	unsigned int mn = iminor(inode);
+    printk(KERN_INFO "%s open dev %d %d\n",AIC12202_DEVICE_NAME,mj,mn);
+    struct aic12202_dev *dev = NULL;
+	
+	if (mj != aic12202_major || mn < 0 || mn >= aic12202_ndevices)
+	{
+		printk(KERN_WARNING "[target] "	"No device found with minor=%d and major=%d\n", mj, mn);
+		return -ENODEV; /* No such device */
+	}
+	
+	dev = &aic12202_devices[mn];
+	filp->private_data = dev; 
+	
+	if (inode->i_cdev != &dev->cdev)
+	{
+		printk(KERN_WARNING "[target] open: internal error\n");
+		return -ENODEV; /* No such device */
+	}
+    
 	return 0;
 }
 
@@ -52,31 +72,43 @@ int aic12202_release (struct inode *inode, struct file *filp)
 }
 
 
-ssize_t do_aic12202_read (struct inode *inode, struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
-{
-	return 0;
-}
-
 
 ssize_t aic12202_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
-	//return do_aic12202_read(filp->f_dentry->d_inode, filp, buf, count, f_pos);
 	return 0;
 }
 
 
 
-ssize_t do_aic12202_write (struct inode *inode, struct file *filp, const char __user *buf,
-		size_t count, loff_t *f_pos)
-{
-	return count;
-}
 
 
-ssize_t aic12202_write(struct file *filp, const char __user *buf, size_t count,
-		loff_t *f_pos)
+/**
+ * buf must be 4 bytes len
+ * byte 0 - channel
+ * byte 1,2 value byte1<<8|byte2
+ * byte 3 - 0
+ * */
+ssize_t aic12202_write(struct file *filp, const char __user *buf, size_t count,	loff_t *f_pos)
 {
-	//return do_aic12202_write(filp->f_dentry->d_inode, filp, buf, count, f_pos);
+    uint16_t value;
+    uint8_t channel;
+
+    if (count == 4 && aic12202_base!=0)
+    {
+        uint8_t _buf[4];
+        copy_from_user(_buf, buf, count);
+        channel = _buf[0];
+        if (channel > 7)
+            return 0;
+        value = _buf[1]<<8|_buf[2];
+        //printk(KERN_INFO "%02X %02X %02X %02X\n",_buf[0], _buf[1],_buf[2],_buf[3]);
+        //printk(KERN_INFO "channel %d value %04X\n",channel, value);
+        while ((1<<5)&inb(aic12202_base+0));
+        outw (((channel<<12)|(value&4095)),aic12202_base+2);
+        
+        
+    }
+    return count;
 }
 
 
